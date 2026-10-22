@@ -8,6 +8,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
+PING_PAGE = """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fight Signal Phone Latency</title><style>body{font:16px system-ui;background:#0b1424;color:#eaf2ff;max-width:550px;margin:40px auto;padding:16px}button{padding:14px 24px;background:#2776e8;color:white;border:0;border-radius:8px;font-size:17px}pre{white-space:pre-wrap;background:#16243a;padding:16px;border-radius:10px}</style></head><body><h2>Fight Signal — Phone to Ohio</h2><p>Switch off Wi-Fi to test cellular. Wait for the service to wake up before measuring.</p><button id="go">Run 30 pings</button><pre id="out">Ready</pre><script>document.getElementById("go").onclick=async()=>{let out=document.getElementById("out"),vals=[],fail=0;out.textContent="Testing...";for(let i=0;i<30;i++){let t=performance.now();try{let r=await fetch("/ping?i="+i+"&t="+Date.now(),{cache:"no-store"});if(!r.ok)throw Error(r.status);await r.arrayBuffer();vals.push(performance.now()-t)}catch(e){fail++}out.textContent="Completed "+(i+1)+"/30";await new Promise(r=>setTimeout(r,150))}vals.sort((a,b)=>a-b);let p=q=>vals.length?vals[Math.ceil(q*vals.length)-1].toFixed(1):"n/a";out.textContent="Phone → Ohio → Phone (HTTPS)\\nSamples: "+vals.length+" | Failures: "+fail+"\\nMedian: "+p(.5)+" ms\\nP95: "+p(.95)+" ms\\nMin: "+p(1/vals.length)+" ms\\nMax: "+p(1)+" ms\\n\\nNote: browser HTTP timing, not ICMP ping or trading order latency. Free Render cold starts can skew results."};</script></body></html>"""
+
 TARGET = "https://external-api.kalshi.com/trade-api/v2/exchange/status"
 MAX_SAMPLES = 15
 
@@ -43,17 +45,26 @@ def benchmark():
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
-        if path not in ("/", "/health", "/benchmark"):
+        if path not in ("/", "/health", "/benchmark", "/ping", "/phone-test"):
             self.send_error(404)
             return
-        if path == "/benchmark":
+        if path == "/phone-test":
+            raw = PING_PAGE.encode("utf-8")
+            content_type = "text/html; charset=utf-8"
+        elif path == "/ping":
+            raw = b"ok"
+            content_type = "text/plain"
+        elif path == "/benchmark":
             data = benchmark()
+            raw = json.dumps(data).encode("utf-8")
+            content_type = "application/json"
         else:
             data = {"service": "Fight Signal Ohio latency test", "read_only": True, "ready": True,
-                    "benchmark_path": "/benchmark"}
-        raw = json.dumps(data).encode("utf-8")
+                    "benchmark_path": "/benchmark", "phone_test_path": "/phone-test"}
+            raw = json.dumps(data).encode("utf-8")
+            content_type = "application/json"
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
