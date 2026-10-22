@@ -6,6 +6,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 TARGET = "https://external-api.kalshi.com/trade-api/v2/exchange/status"
 MAX_SAMPLES = 15
@@ -41,10 +42,11 @@ def benchmark():
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path not in ("/", "/health", "/benchmark"):
+        path = urlsplit(self.path).path
+        if path not in ("/", "/health", "/benchmark"):
             self.send_error(404)
             return
-        if self.path == "/benchmark":
+        if path == "/benchmark":
             data = benchmark()
         else:
             data = {"service": "Fight Signal Ohio latency test", "read_only": True, "ready": True,
